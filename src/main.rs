@@ -1,26 +1,60 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
+use clap::Parser;
 use csv::Writer;
 use plex_to_letterboxd::client::PlexClient;
 
+/// Export your Plex watch history to a CSV file compatible with Letterboxd's import feature.
+#[derive(Parser, Debug)]
+#[command(name = "plex-to-letterboxd")]
+#[command(about = "Export Plex watch history to Letterboxd-compatible CSV", long_about = None)]
+struct Args {
+    /// Plex Media Server URL (e.g., http://192.168.1.100:32400)
+    /// Can also be set via PLEX_URL environment variable
+    #[arg(long, env = "PLEX_URL")]
+    plex_url: Option<String>,
+
+    /// Plex authentication token
+    /// Can also be set via PLEX_TOKEN environment variable
+    #[arg(long, env = "PLEX_TOKEN")]
+    plex_token: Option<String>,
+
+    /// Output CSV file path (defaults to "plex_watch_history.csv")
+    /// Can also be set via OUTPUT_CSV environment variable
+    #[arg(long, default_value = "plex_watch_history.csv", env = "OUTPUT_CSV")]
+    output_csv: String,
+}
+
 fn main() -> Result<()> {
-    // Example usage of the PlexClient
-    // Replace these with your actual Plex server URL and token
+    let args = Args::parse();
 
-    // Get the server URL from environment variable or use a default
-    let base_url =
-        std::env::var("PLEX_URL").unwrap_or_else(|_| "http://10.0.0.105:32400".to_string());
+    // Validate required environment variables/arguments
+    let base_url = args.plex_url.context(
+        "Missing required argument: PLEX_URL\n\
+         Please provide --plex-url or set the PLEX_URL environment variable.\n\
+         Example: --plex-url http://192.168.1.100:32400",
+    )?;
 
-    // Get the token from environment variable
-    // You can get your token from: https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
-    let token = std::env::var("PLEX_TOKEN").unwrap_or_else(|_| "".to_string());
+    let token = args.plex_token.context(
+        "Missing required argument: PLEX_TOKEN\n\
+         Please provide --plex-token or set the PLEX_TOKEN environment variable.\n\
+         To find your token, see: https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/",
+    )?;
+
+    if token.is_empty() {
+        anyhow::bail!(
+            "PLEX_TOKEN cannot be empty\n\
+             Please provide a valid token via --plex-token or set the PLEX_TOKEN environment variable.\n\
+             To find your token, see: https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/"
+        );
+    }
 
     // Create a new Plex client
     let client = PlexClient::new(base_url, token);
 
     // Create CSV writer
-    let output_file =
-        std::env::var("OUTPUT_CSV").unwrap_or_else(|_| "plex_watch_history.csv".to_string());
-    let mut wtr = Writer::from_path(&output_file)?;
+    let output_file = &args.output_csv;
+    let mut wtr = Writer::from_path(output_file)
+        .with_context(|| format!("Failed to create output file: {}", output_file))?;
 
     // Write CSV header
     wtr.write_record(&["Title", "imdbID", "WatchedDate", "Tags"])?;

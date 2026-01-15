@@ -24,7 +24,21 @@ Alternatively, you can find it in your Plex server's preferences or by checking 
 
 ### Running the Application
 
-Set environment variables and run:
+You can provide configuration via command-line arguments or environment variables. The program requires a Plex server URL and authentication token.
+
+#### Using Command-Line Arguments
+
+```bash
+cargo run -- --plex-url http://your-server-ip:32400 --plex-token your-plex-token-here
+```
+
+With custom output file:
+
+```bash
+cargo run -- --plex-url http://your-server-ip:32400 --plex-token your-plex-token-here --output-csv my_watch_history.csv
+```
+
+#### Using Environment Variables
 
 ```bash
 export PLEX_URL="http://your-server-ip:32400"
@@ -33,13 +47,47 @@ export OUTPUT_CSV="plex_watch_history.csv"  # Optional, defaults to "plex_watch_
 cargo run
 ```
 
-Or on Windows:
+On Windows:
 
 ```cmd
 set PLEX_URL=http://your-server-ip:32400
 set PLEX_TOKEN=your-plex-token-here
 set OUTPUT_CSV=plex_watch_history.csv
 cargo run
+```
+
+#### Mixed Usage
+
+You can mix command-line arguments and environment variables. Command-line arguments take precedence:
+
+```bash
+export PLEX_TOKEN="your-plex-token-here"
+cargo run -- --plex-url http://your-server-ip:32400
+```
+
+#### Getting Help
+
+To see all available options:
+
+```bash
+cargo run -- --help
+```
+
+Or after building:
+
+```bash
+cargo build --release
+./target/release/plex-to-letterboxd --help
+```
+
+#### Error Messages
+
+If required arguments are missing, the program will display helpful error messages and exit. For example:
+
+```
+Error: Missing required argument: PLEX_TOKEN
+Please provide --plex-token or set the PLEX_TOKEN environment variable.
+To find your token, see: https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
 ```
 
 The application will:
@@ -73,10 +121,13 @@ Once complete, upload the generated CSV file to [Letterboxd's import page](https
 
 ## Features
 
+- ✅ CLI application with command-line argument support
+- ✅ Environment variable support for configuration
 - ✅ Automatic pagination for large watch histories
 - ✅ IMDb ID extraction from Plex metadata
 - ✅ CSV export in Letterboxd-compatible format
 - ✅ Error handling and progress logging
+- ✅ Helpful error messages for missing configuration
 
 ## Resources
 
