@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use reqwest::blocking::Client;
 use serde::Deserialize;
 
+use crate::library::PlexLibrarySection;
 use crate::media_item::PlexMediaItem;
 use crate::watch_history::{PlexWatchHistory, PlexWatchHistoryItem};
 
@@ -115,6 +116,10 @@ impl PlexClient {
     /// fetching 100 items per request. The iterator yields only `PlexWatchHistoryItem`
     /// values, not the metadata wrapper.
     ///
+    /// # Arguments
+    ///
+    /// * `library_section_id` - The library section ID to filter watch history by
+    ///
     /// # Returns
     ///
     /// An iterator that yields `PlexWatchHistoryItem` values. The iterator
@@ -127,19 +132,26 @@ impl PlexClient {
     ///
     /// let client = PlexClient::new(url, token);
     ///
-    /// for item in client.watch_history_iter() {
+    /// for item in client.watch_history_iter("1") {
     ///     let item = item?;
     ///     println!("Watched: {} at {}", item.title, item.viewed_at);
     /// }
     /// ```
-    pub fn watch_history_iter(&self) -> WatchHistoryIterator<'_> {
-        WatchHistoryIterator::new(self)
+    pub fn watch_history_iter(&self, library_section_id: &str) -> WatchHistoryIterator<'_> {
+        WatchHistoryIterator::new(self, library_section_id)
     }
 
     pub fn get_media_item_metadata(&self, rating_key: String) -> Result<PlexMediaItem> {
         let container: MediaContainer<PlexMediaItem> = self
             .get_media_container(format!("/library/metadata/{}", rating_key).as_str(), None)
             .context("Failed to get media item metadata")?;
+        Ok(container.into_inner())
+    }
+
+    pub fn get_library_sections(&self) -> Result<PlexLibrarySection> {
+        let container: MediaContainer<PlexLibrarySection> = self
+            .get_media_container("/library/sections", None)
+            .context("Failed to get library sections")?;
         Ok(container.into_inner())
     }
 
@@ -247,6 +259,7 @@ impl PlexClient {
         &self,
         offset: u32,
         page_size: u32,
+        library_section_id: &str,
     ) -> Result<MediaContainer<PlexWatchHistory>> {
         let url = format!("{}/status/sessions/history/all", self.base_url);
 
@@ -264,7 +277,7 @@ impl PlexClient {
             .header("X-Plex-Container-Size", &page_size_str)
             .query(&[
                 ("sort", "viewedAt:desc"),
-                ("librarySectionID", "1"),
+                ("librarySectionID", library_section_id),
                 ("accountID", "1"),
             ]);
 
@@ -293,6 +306,7 @@ impl PlexClient {
 /// It yields only `PlexWatchHistoryItem` values, not the metadata wrapper.
 pub struct WatchHistoryIterator<'a> {
     client: &'a PlexClient,
+    library_section_id: String,
     current_items: Vec<PlexWatchHistoryItem>,
     current_index: usize,
     offset: u32,
@@ -301,9 +315,10 @@ pub struct WatchHistoryIterator<'a> {
 }
 
 impl<'a> WatchHistoryIterator<'a> {
-    fn new(client: &'a PlexClient) -> Self {
+    fn new(client: &'a PlexClient, library_section_id: &str) -> Self {
         Self {
             client,
+            library_section_id: library_section_id.to_string(),
             current_items: Vec::new(),
             current_index: 0,
             offset: 0,
@@ -321,7 +336,7 @@ impl<'a> WatchHistoryIterator<'a> {
         // Fetch the page using the specialized method with headers
         let container: MediaContainer<PlexWatchHistory> = self
             .client
-            .get_watch_history_page(self.offset, self.page_size)
+            .get_watch_history_page(self.offset, self.page_size, &self.library_section_id)
             .context("Failed to fetch watch history page")?;
 
         let history = container.into_inner();

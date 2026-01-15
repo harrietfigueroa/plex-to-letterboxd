@@ -18,6 +18,10 @@ struct Args {
     #[arg(long, env = "PLEX_TOKEN")]
     plex_token: Option<String>,
 
+    /// Library name to filter watch history (e.g., "Movies")
+    #[arg(long, required = true)]
+    library_name: String,
+
     /// Output CSV file path (defaults to "plex_watch_history.csv")
     /// Can also be set via OUTPUT_CSV environment variable
     #[arg(long, default_value = "plex_watch_history.csv", env = "OUTPUT_CSV")]
@@ -51,6 +55,36 @@ fn main() -> Result<()> {
     // Create a new Plex client
     let client = PlexClient::new(base_url, token);
 
+    // Get library sections to find the matching library
+    let library_sections = client
+        .get_library_sections()
+        .context("Failed to get library sections")?;
+
+    // Find the directory matching the library name
+    let library_directory = library_sections
+        .directory
+        .iter()
+        .find(|dir| dir.title == args.library_name)
+        .with_context(|| {
+            format!(
+                "Library '{}' not found. Available libraries: {}",
+                args.library_name,
+                library_sections
+                    .directory
+                    .iter()
+                    .map(|dir| dir.title.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?;
+
+    // Extract the location ID from the directory's first location
+    let location_id = library_directory
+        .location
+        .first()
+        .map(|loc| loc.id.to_string())
+        .context("Library directory has no location ID")?;
+
     // Create CSV writer
     let output_file = &args.output_csv;
     let mut wtr = Writer::from_path(output_file)
@@ -62,7 +96,8 @@ fn main() -> Result<()> {
 
     // Loop over watch history items using paginated iterator
     // The iterator automatically handles pagination (100 items per request)
-    for item_result in client.watch_history_iter() {
+    // Pass the location ID to filter by library section
+    for item_result in client.watch_history_iter(&location_id.to_string()) {
         let item = item_result?;
         println!("Processing: {}", item.title);
 
