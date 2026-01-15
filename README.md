@@ -6,9 +6,41 @@ A Rust application that exports your Plex watch history to a CSV file compatible
 
 ### Prerequisites
 
-- Rust (install from https://rustup.rs/)
 - A Plex Media Server
 - Your Plex authentication token
+- (Optional) Rust (install from https://rustup.rs/) - only needed if building from source
+
+### Downloading Pre-built Executables
+
+Pre-built executables are available for multiple platforms. Download them from the [latest release](https://github.com/harrietfigueroa/plex-to-letterboxd/releases/latest):
+
+1. Click the link above or navigate to the [Releases](https://github.com/harrietfigueroa/plex-to-letterboxd/releases/latest) page
+2. Download the appropriate archive for your platform:
+   - `plex-to-letterboxd-linux-x86_64-v{VERSION}.tar.gz` for Linux (x86_64)
+   - `plex-to-letterboxd-windows-x86_64-v{VERSION}.zip` for Windows (x86_64)
+   - `plex-to-letterboxd-macos-x86_64-v{VERSION}.tar.gz` for macOS (Intel)
+   - `plex-to-letterboxd-macos-arm64-v{VERSION}.tar.gz` for macOS (Apple Silicon)
+3. Extract the archive to get the executable:
+   - On **Windows**: Extract the `.zip` file to get `plex-to-letterboxd.exe`
+   - On **Linux/macOS**: Extract the `.tar.gz` file to get the `plex-to-letterboxd` binary
+
+After downloading, make the executable file executable on Linux/macOS:
+
+```bash
+chmod +x plex-to-letterboxd
+```
+
+Then run it:
+
+```bash
+./plex-to-letterboxd --plex-url http://your-server-ip:32400 --plex-token your-plex-token-here
+```
+
+On Windows:
+
+```cmd
+plex-to-letterboxd.exe --plex-url http://your-server-ip:32400 --plex-token your-plex-token-here
+```
 
 ### Finding Your Plex Token
 
