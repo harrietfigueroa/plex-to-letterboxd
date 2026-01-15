@@ -1,0 +1,150 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "src/**"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: "Create a release (only if Cargo.toml version changed)"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    name: Build on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: plex-to-letterboxd-linux-x86_64
+            artifact_ext: ""
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: plex-to-letterboxd-windows-x86_64
+            artifact_ext: ".exe"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: plex-to-letterboxd-macos-x86_64
+            artifact_ext: ""
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: plex-to-letterboxd-macos-arm64
+            artifact_ext: ""
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Prepare artifact
+        shell: bash
+        run: |
+          mkdir -p release
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            cp target/${{ matrix.target }}/release/plex-to-letterboxd${{ matrix.artifact_ext }} release/
+          else
+            cp target/${{ matrix.target }}/release/plex-to-letterboxd release/
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release/plex-to-letterboxd${{ matrix.artifact_ext }}
+          retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set release flag for workflow_dispatch
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          echo "cargo_toml=true" >> $GITHUB_OUTPUT
+        id: check_changes_manual
+
+      - name: Get version from Cargo.toml
+        id: get_version
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | cut -d '"' -f 2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download all artifacts
+        if: |
+          (github.event_name == 'push' && steps.check_changes.outputs.cargo_toml == 'true') ||
+          (github.event_name == 'workflow_dispatch' && steps.check_changes_manual.outputs.cargo_toml == 'true')
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release archive
+        if: |
+          (github.event_name == 'push' && steps.check_changes.outputs.cargo_toml == 'true') ||
+          (github.event_name == 'workflow_dispatch' && steps.check_changes_manual.outputs.cargo_toml == 'true')
+        shell: bash
+        run: |
+          mkdir -p release
+          VERSION="${{ steps.get_version.outputs.version }}"
+          for dir in artifacts/*/; do
+            name=$(basename "$dir")
+            cd "$dir"
+            if [[ "$name" == *"windows"* ]]; then
+              zip -r "../../release/${name}-v${VERSION}.zip" *
+            else
+              tar -czf "../../release/${name}-v${VERSION}.tar.gz" *
+            fi
+            cd ../..
+          done
+
+      - name: Create Release
+        if: |
+          (github.event_name == 'push' && steps.check_changes.outputs.cargo_toml == 'true') ||
+          (github.event_name == 'workflow_dispatch' && steps.check_changes_manual.outputs.cargo_toml == 'true')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release/*
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          name: Release ${{ steps.get_version.outputs.tag }}
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
