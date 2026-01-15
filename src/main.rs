@@ -91,5 +91,8 @@ fn main() -> Result<()> {
     // Flush the writer to ensure all data is written
     wtr.flush()?;
 
+    println!("\n✓ CSV file successfully generated: {}", output_file);
+    println!("Upload your watch history at: https://letterboxd.com/import/");
+
     Ok(())
 }
